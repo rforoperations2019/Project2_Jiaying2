@@ -4,16 +4,8 @@ library(reshape2)
 library(dplyr)
 library(plotly)
 library(shinythemes)
-library(DT)
-library(stringr)
-library(tools)
-library(rlist)
-library(scales)
-library(data.table)
-library(rgdal)
+library(utils)
 library(httr)
-library(jsonlite)
-library(leaflet.extras)
 
 # Generate URL
 url <- URLencode('https://data.wprdc.org/api/3/action/datastore_search_sql?sql=SELECT * from "79ddcc74-33d2-4735-9b95-4169c7d0413d"', repeated = TRUE)
@@ -37,18 +29,18 @@ sidebar <- dashboardSidebar(width = 250,
     
     # Menu Items ----------------------------------------------
     menuItem("Map", icon = icon("bar-chart"), tabName = "map"),
-    menuItem("Chart", icon = icon("bar-chart"), tabName = "chart"),
+    menuItem("Chart", icon = icon("bar-chart"), tabName = "counts"),
     menuItem("Table", icon = icon("th"), tabName = "table", badgeLabel = "new", badgeColor = "green"),
     
     # Inputs: select council district to plot ----------------------------------------------
     selectInput(inputId = "district",
-                label = "Select council district to view",
+                label = "Select Council District",
                 choices = sort(unique(intersection$council_district)),
                 selected = "1"),
     
     # Inputs: select operation type to plot ----------------------------------------------
     checkboxGroupInput(inputId = "type",
-                       label = "Select operation type to view",
+                       label = "Select Operation Type",
                        choices = sort(unique(intersection$operation_type)),
                        selected = c("Actuated","Actuated/PED","Fixed","Fixed / Ped Actuated","Fully Actuated", "Semi Actuated","Master")),
     
@@ -59,7 +51,7 @@ sidebar <- dashboardSidebar(width = 250,
                  value = 508),
     
     # Download Button--------------------------------------------------------
-    downloadButton("downloadData", "Download Data for Your Seclection")
+    downloadButton("downloadData", "Download Raw Data")
   )
 )
 
@@ -74,21 +66,20 @@ body <- dashboardBody(tabItems(
                    leafletOutput("intersection_map")
           ))),
   
-  # Graph page ----------------------------------------------
+  # Chart page ----------------------------------------------
   tabItem("chart",
             # Plot ----------------------------------------------
             fluidRow(
-              tabBox(width = 12,
-                     tabPanel("police division and public works division", plotlyOutput("plot_division")),
-                     tabPanel("Number of Signalized Intersections by Neighborhood", plotlyOutput("plot_neighborhood")))
-              
+              tabBox(width = 8,
+                     tabPanel("Overall Distribution", plotlyOutput("plot_count")))
             )),
-
+  
+  
   # Data Table Page ----------------------------------------------
   tabItem("table",
           fluidPage(
             box(title = "Datatable for Your Selection", DT::dataTableOutput("table"), width = 12)))
-  )
+)
 )
 
 
@@ -96,52 +87,14 @@ ui <- dashboardPage(header, sidebar, body, skin = "yellow")
 
 # Define server function required to create plots and value boxes -----
 server <- function(input, output) {
-  
-  # Reactive data function -------------------------------------------
-  intersection.subset <- reactive({
-      
-    #District Filter
-    intersection <- subset(intersection, council_district %in% input$district)
-    
-    #Type Filter
-    intersection <- subset(intersection, operation_type %in% input$type)
-    
-    # Return dataframe ----------------------------------------------
-    return(intersection)
-  })
-  
-  # A plot showing the intersection count by different wards -----------------------------------
-  output$plot_division <- renderPlot({
-    ggplot(intersection.subset(), 
-           aes(x = pli_division, 
-               y = public_works_division))+ 
-      geom_point() 
-  })
-  
-  # A plot showing the intersection count by neighborhoods -----------------------------------
-  output$plot_neighborhood <- renderPlotly({
-      ggplot(intersection.subset(), 
-             aes(x = neighborhood, fill = neighborhood))+
-      geom_bar(stat='count') +
-      labs (y = "Number of Signalized Intersections", x = "Neighborhood") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  })
+
   
   # Data table of Signalized Intersections ----------------------------------------------
   output$table <- DT::renderDataTable({
-    ad <-subset(intersection.subset(),select = c(police_zone, fire_zone, council_district, flash_yellow, neighborhood, description, pli_division, flash_time, public_works_division, operation_type, ward, id, name))
+    ad <-subset(adultInput(), select = c(Reporting.Year, Reporting.Quarter, Reporting.Organization, Certified.Type, County, Certified.Capacity, 
+                                         End.Census, Male.Census, Female.Census))
     DT::datatable(ad, options = list(scrollX = TRUE))
   })
-  
-  #Download function
-  output$downloadData <- downloadHandler(
-    filename = function() {
-      paste("Pittsburgh Signalized Intersections", ".csv", sep = "")
-    },
-    content = function(file) {
-      write.csv(intersection.subset(), file, row.names = FALSE)
-    }
-  )
   
 }
 
