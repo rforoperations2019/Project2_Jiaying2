@@ -135,7 +135,8 @@ server <- function(input, output) {
   observe({
     if(input$marker){
       inter = intersection.subset()
-      pal1 <- colorFactor(palette = "RdYlBu", domain = unique(inter$operarion_type))
+      type <- unique(inter$operation_type)
+      pal1 <- colorFactor(palette = "RdYlBu", domain = type)
 
       leafletProxy("intersection_map",data = inter) %>%
         clearGroup("inter") %>%
@@ -161,7 +162,8 @@ server <- function(input, output) {
   observe({
     if(input$marker2){
       inter = intersection.subset()
-      pal2 <- colorFactor(palette = "Paired", domain = unique(inter$neighborhood))
+      neighborhood <-unique(inter$neighborhood)
+      pal2 <- colorFactor(palette = "Paired", domain = neighborhood)
 
       leafletProxy("intersection_map",data = inter) %>%
         clearGroup("inter2") %>%
