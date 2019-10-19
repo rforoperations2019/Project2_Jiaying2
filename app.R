@@ -22,10 +22,9 @@ get <- GET(url)
 # Retrieve results
 intersection <- fromJSON(content(get, "text"))$result$records
 # Clean data by omit NA values
-intersection <-na.omit(intersection)
-View(intersection)
+intersection <- na.omit(intersection)
 # load map data
-district <- readOGR("/Users/jiayingshi/Rshiny/Project2_Jiaying2/PGH_CityCouncilOD.geojson")
+district <- readOGR("PGH_CityCouncilOD.geojson")
 # Avoid plotly issues ----------------------------------------------
 pdf(NULL)
 
@@ -43,6 +42,12 @@ sidebar <- dashboardSidebar(width = 250,
     menuItem("Operation Type Info Chart", icon = icon("bar-chart"), tabName = "type"),
     menuItem("Table", icon = icon("th"), tabName = "table", badgeLabel = "new", badgeColor = "green"),
     
+    # Inputs: choose to add markers by type to the map ----------------------------------------------------
+    checkboxInput("marker", "Markers by Operation Type", TRUE),
+    
+    # Inputs: choose to add markers by neighborhood to the map ----------------------------------------------------
+    checkboxInput("marker2", "Markers by Neighborhood", FALSE),
+    
     # Inputs: select council district to plot ----------------------------------------------
     selectInput(inputId = "district",
                 label = "Select Council District to View",
@@ -54,12 +59,6 @@ sidebar <- dashboardSidebar(width = 250,
                        label = "Select Operation Type to View",
                        choices = sort(unique(intersection$operation_type)),
                        selected = c("Actuated","Actuated/PED","Fixed","Fixed / Ped Actuated","Fully Actuated", "Semi Actuated","Master")),
-    
-    # Inputs: choose to add markers by type to the map ----------------------------------------------------
-    checkboxInput("marker", "Add Markers by Operation Type", TRUE),
-    
-    # Inputs: choose to add markers by neighborhood to the map ----------------------------------------------------
-    checkboxInput("all", "Show all Signalized Intersections", FALSE),
     
     # Download Button--------------------------------------------------------
     downloadButton("downloadData", "Download Data for Your Seclection")
@@ -123,11 +122,11 @@ server <- function(input, output) {
     leaflet() %>%
       addProviderTiles("OpenStreetMap.HOT", group = "HOT") %>%
       addProviderTiles("Stamen.TonerLite", group = "Toner Lite") %>%
-      addPolygons(data = district, color = "navy",group = "Show council districts",weight = 2 ) %>%
+      addPolygons(data = district, color = "navy",group = "Show Council Districts",weight = 2 ) %>%
       setView(-79.978, 40.439, 11) %>%
       addLayersControl(
         baseGroups = c("HOT", "Toner Lite"),
-        overlayGroups = "Show council districts",
+        overlayGroups = "Show Council Districts",
         options = layersControlOptions(collapsed = FALSE)
       )
   })
@@ -136,10 +135,9 @@ server <- function(input, output) {
   observe({
     if(input$marker){
       inter = intersection.subset()
-      pal1 <-colorFactor(palette = "RdYlBu", domain = unique(inter$operarion_type) )
+      pal1 <- colorFactor(palette = "RdYlBu", domain = unique(inter$operarion_type))
 
       leafletProxy("intersection_map",data = inter) %>%
-
         clearGroup("inter") %>%
         removeControl("legend")%>%
         addCircleMarkers(lng = ~longitude ,
@@ -147,44 +145,43 @@ server <- function(input, output) {
                          group ="inter",
                          popup = paste("longitude:",inter$longitude,"latitue:",inter$latitude,"type:",inter$operarion_type),
                          color = ~pal1(type),
-                         radius = 0.1)%>%
-        addLegend(position = "topright" , 
-                  pal = pal1, 
+                         radius = 1)%>%
+        addLegend(position = "topright" ,
+                  pal = pal1,
                   values = inter$operation_type,
                   title = "Operation Type",
                   layerId = "legend")
     }
-    else{leafletProxy("intersection_map",data = intersection.subset()) %>% 
-        clearGroup("inter") %>% 
+    else{leafletProxy("intersection_map",data = intersection.subset()) %>%
+        clearGroup("inter") %>%
         removeControl("legend")}
   })
-  
-  # #add circle markers based on neighborhood
-  # observe({
-  #   if(input$marker2){
-  #     inter = intersection.subset()
-  #     pal1 <-colorFactor(palette = "Paired", domain = unique(inter$neighborhood))
-  #     
-  #     leafletProxy("intersection_map",data = inter) %>%
-  #       
-  #       clearGroup("inter") %>%
-  #       removeControl("legend")%>%
-  #       addCircleMarkers(lng = ~longitude ,
-  #                        lat = ~latitude,
-  #                        group ="inter",
-  #                        popup = paste("longitude:",inter$longitude,"latitue:",inter$latitude,"neighborhood:",inter$neighborhood),
-  #                        color = ~pal1(type),
-  #                        radius = 0.1)%>%
-  #       addLegend(position = "topright" , 
-  #                 pal = pal1, 
-  #                 values = inter$neighborhood,
-  #                 title = "Neighborhood",
-  #                 layerId = "legend")
-  #   }
-  #   else{leafletProxy("intersection_map",data = intersection.subset()) %>% 
-  #       clearGroup("inter") %>% 
-  #       removeControl("legend")}
-  # })
+
+  #add circle markers based on neighborhood
+  observe({
+    if(input$marker2){
+      inter = intersection.subset()
+      pal2 <- colorFactor(palette = "Paired", domain = unique(inter$neighborhood))
+
+      leafletProxy("intersection_map",data = inter) %>%
+        clearGroup("inter2") %>%
+        removeControl("legend2")%>%
+        addCircleMarkers(lng = ~longitude ,
+                         lat = ~latitude,
+                         group ="inter2",
+                         popup = paste("longitude:",inter$longitude,"latitue:",inter$latitude,"neighborhood:",inter$neighborhood),
+                         color = ~pal2(neighborhood),
+                         radius = 1)%>%
+        addLegend(position = "topright" ,
+                  pal = pal2,
+                  values = inter$neighborhood,
+                  title = "Neighborhood",
+                  layerId = "legend2")
+    }
+    else{leafletProxy("intersection_map",data = intersection.subset()) %>%
+        clearGroup("inter2") %>%
+        removeControl("legend2")}
+  })
 
   # A plot showing the intersection count by operation type -----------------------------------
   output$plot_type <- renderPlotly({
