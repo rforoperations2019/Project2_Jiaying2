@@ -42,19 +42,19 @@ sidebar <- dashboardSidebar(width = 250,
     menuItem("Operation Type Info Chart", icon = icon("bar-chart"), tabName = "type"),
     menuItem("Table", icon = icon("th"), tabName = "table", badgeLabel = "new", badgeColor = "green"),
     
-    # Inputs: choose to add markers by type to the map ----------------------------------------------------
+    # Inputs: choose to add markers by operation type to the map ----------------------------------------------------
     checkboxInput("marker", "Markers by Operation Type", TRUE),
     
     # Inputs: choose to add markers by neighborhood to the map ----------------------------------------------------
     checkboxInput("marker2", "Markers by Neighborhood", FALSE),
     
-    # Inputs: select council district to plot ----------------------------------------------
+    # Inputs: select council district to view ----------------------------------------------
     selectInput(inputId = "district",
                 label = "Select Council District to View",
                 choices = sort(unique(intersection$council_district)),
                 selected = "1"),
     
-    # Inputs: select operation type to plot ----------------------------------------------
+    # Inputs: select operation type to view ----------------------------------------------
     checkboxGroupInput(inputId = "type",
                        label = "Select Operation Type to View",
                        choices = sort(unique(intersection$operation_type)),
@@ -117,7 +117,7 @@ server <- function(input, output) {
     return(intersection)
   })
   
-  # Basic Map
+  # Basic Map with a layer of district polygons
   output$intersection_map <- renderLeaflet({
     leaflet() %>%
       addProviderTiles("OpenStreetMap.HOT", group = "HOT") %>%
@@ -131,7 +131,7 @@ server <- function(input, output) {
       )
   })
 
-  #add circle markers based on operation type
+  # Add circle markers based on operation type
   observe({
     if(input$marker){
       inter = intersection.subset()
@@ -145,7 +145,7 @@ server <- function(input, output) {
                          group ="inter",
                          popup = paste("longitude:",inter$longitude,"latitue:",inter$latitude,"type:",inter$operarion_type),
                          color = ~pal1(type),
-                         radius = 1)%>%
+                         radius = 1) %>%
         addLegend(position = "topright" ,
                   pal = pal1,
                   values = inter$operation_type,
@@ -157,7 +157,7 @@ server <- function(input, output) {
         removeControl("legend")}
   })
 
-  #add circle markers based on neighborhood
+  # Add circle markers based on neighborhood
   observe({
     if(input$marker2){
       inter = intersection.subset()
@@ -192,18 +192,18 @@ server <- function(input, output) {
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
-  # A plot showing the intersection count by neighborhoods -----------------------------------
+  # A plot showing the intersection count by neighborhood -----------------------------------
   output$plot_neighborhood <- renderPlotly({
       ggplot(intersection.subset(), 
              aes(x = neighborhood, fill = neighborhood)) +
       geom_bar(stat = 'count') +
-      labs (y = "Number of Signalized Intersections", x = "Neighborhood") +
+      labs (y = "Number of Signalized Intersections", x = "Neighborhood", fill = "Neighborhood") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
   # Data table of Signalized Intersections ----------------------------------------------
   output$table <- DT::renderDataTable({
-    ad <-subset(intersection.subset(),select = c(police_zone, fire_zone, council_district, flash_yellow, neighborhood, description, pli_division, flash_time, public_works_division, operation_type, ward, id, name))
+    ad <-subset(intersection.subset(),select = c(name, neighborhood, description, operation_type, council_district, ward, police_zone, fire_zone, flash_yellow, flash_time, pli_division, public_works_division, id))
     DT::datatable(ad, options = list(scrollX = TRUE))
   })
   
