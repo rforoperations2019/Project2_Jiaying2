@@ -24,6 +24,8 @@ intersection <- fromJSON(content(get, "text"))$result$records
 # Clean data by omit NA values
 intersection <-na.omit(intersection)
 View(intersection)
+# load map data
+district <- readOGR("/Users/jiayingshi/Rshiny/Project2_Jiaying2/PGH_CityCouncilOD.geojson")
 # Avoid plotly issues ----------------------------------------------
 pdf(NULL)
 
@@ -36,27 +38,28 @@ sidebar <- dashboardSidebar(width = 250,
     id = "tabs",
     
     # Menu Items ----------------------------------------------
-    menuItem("Map", icon = icon("bar-chart"), tabName = "map"),
-    menuItem("Chart", icon = icon("bar-chart"), tabName = "chart"),
+    menuItem("Signalized Intersection Map", icon = icon("map-pin"), tabName = "map"),
+    menuItem("Neighborhood Info Chart", icon = icon("bar-chart"), tabName = "neighborhood"),
+    menuItem("Operation Type Info Chart", icon = icon("bar-chart"), tabName = "type"),
     menuItem("Table", icon = icon("th"), tabName = "table", badgeLabel = "new", badgeColor = "green"),
     
     # Inputs: select council district to plot ----------------------------------------------
     selectInput(inputId = "district",
-                label = "Select council district to view",
+                label = "Select Council District to View",
                 choices = sort(unique(intersection$council_district)),
                 selected = "1"),
     
     # Inputs: select operation type to plot ----------------------------------------------
     checkboxGroupInput(inputId = "type",
-                       label = "Select operation type to view",
+                       label = "Select Operation Type to View",
                        choices = sort(unique(intersection$operation_type)),
                        selected = c("Actuated","Actuated/PED","Fixed","Fixed / Ped Actuated","Fully Actuated", "Semi Actuated","Master")),
     
-    #   # Select sample size ----------------------------------------------------
-    numericInput(inputId = "n_samp", 
-                 label = "Select number of signalized intercestions to view:", 
-                 min = 1, max = nrow(intersection), 
-                 value = 508),
+    # Inputs: choose to add markers by type to the map ----------------------------------------------------
+    checkboxInput("marker", "Add Markers by Operation Type", TRUE),
+    
+    # Inputs: choose to add markers by neighborhood to the map ----------------------------------------------------
+    checkboxInput("all", "Show all Signalized Intersections", FALSE),
     
     # Download Button--------------------------------------------------------
     downloadButton("downloadData", "Download Data for Your Seclection")
@@ -75,22 +78,27 @@ body <- dashboardBody(tabItems(
           ))),
   
   # Graph page ----------------------------------------------
-  tabItem("chart",
+  tabItem("neighborhood",
             # Plot ----------------------------------------------
             fluidRow(
               tabBox(width = 12,
-                     tabPanel("police division and public works division", plotlyOutput("plot_division")),
                      tabPanel("Number of Signalized Intersections by Neighborhood", plotlyOutput("plot_neighborhood")))
-              
             )),
 
+  # Graph page ----------------------------------------------
+  tabItem("type",
+          # Plot ----------------------------------------------
+          fluidRow(
+            tabBox(width = 12,
+                   tabPanel("Number of Signalized Intersections by Operation Type", plotlyOutput("plot_type")))
+          )),
+  
   # Data Table Page ----------------------------------------------
   tabItem("table",
           fluidPage(
             box(title = "Datatable for Your Selection", DT::dataTableOutput("table"), width = 12)))
   )
 )
-
 
 ui <- dashboardPage(header, sidebar, body, skin = "yellow")
 
@@ -110,19 +118,88 @@ server <- function(input, output) {
     return(intersection)
   })
   
-  # A plot showing the intersection count by different wards -----------------------------------
-  output$plot_division <- renderPlot({
-    ggplot(intersection.subset(), 
-           aes(x = pli_division, 
-               y = public_works_division))+ 
-      geom_point() 
+  # Basic Map
+  output$intersection_map <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles("OpenStreetMap.HOT", group = "HOT") %>%
+      addProviderTiles("Stamen.TonerLite", group = "Toner Lite") %>%
+      addPolygons(data = district, color = "navy",group = "Show council districts",weight = 2 ) %>%
+      setView(-79.978, 40.439, 11) %>%
+      addLayersControl(
+        baseGroups = c("HOT", "Toner Lite"),
+        overlayGroups = "Show council districts",
+        options = layersControlOptions(collapsed = FALSE)
+      )
+  })
+
+  #add circle markers based on operation type
+  observe({
+    if(input$marker){
+      inter = intersection.subset()
+      pal1 <-colorFactor(palette = "RdYlBu", domain = unique(inter$operarion_type) )
+
+      leafletProxy("intersection_map",data = inter) %>%
+
+        clearGroup("inter") %>%
+        removeControl("legend")%>%
+        addCircleMarkers(lng = ~longitude ,
+                         lat = ~latitude,
+                         group ="inter",
+                         popup = paste("longitude:",inter$longitude,"latitue:",inter$latitude,"type:",inter$operarion_type),
+                         color = ~pal1(type),
+                         radius = 0.1)%>%
+        addLegend(position = "topright" , 
+                  pal = pal1, 
+                  values = inter$operation_type,
+                  title = "Operation Type",
+                  layerId = "legend")
+    }
+    else{leafletProxy("intersection_map",data = intersection.subset()) %>% 
+        clearGroup("inter") %>% 
+        removeControl("legend")}
+  })
+  
+  # #add circle markers based on neighborhood
+  # observe({
+  #   if(input$marker2){
+  #     inter = intersection.subset()
+  #     pal1 <-colorFactor(palette = "Paired", domain = unique(inter$neighborhood))
+  #     
+  #     leafletProxy("intersection_map",data = inter) %>%
+  #       
+  #       clearGroup("inter") %>%
+  #       removeControl("legend")%>%
+  #       addCircleMarkers(lng = ~longitude ,
+  #                        lat = ~latitude,
+  #                        group ="inter",
+  #                        popup = paste("longitude:",inter$longitude,"latitue:",inter$latitude,"neighborhood:",inter$neighborhood),
+  #                        color = ~pal1(type),
+  #                        radius = 0.1)%>%
+  #       addLegend(position = "topright" , 
+  #                 pal = pal1, 
+  #                 values = inter$neighborhood,
+  #                 title = "Neighborhood",
+  #                 layerId = "legend")
+  #   }
+  #   else{leafletProxy("intersection_map",data = intersection.subset()) %>% 
+  #       clearGroup("inter") %>% 
+  #       removeControl("legend")}
+  # })
+
+  # A plot showing the intersection count by operation type -----------------------------------
+  output$plot_type <- renderPlotly({
+    ggplot(data = intersection.subset(),
+           aes(x = operation_type, fill = operation_type)) +
+      geom_bar(stat = 'count') +
+      labs (y = "Number of Signalized Intersections", x = "Operation Type", fill = "Operation Type") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
   # A plot showing the intersection count by neighborhoods -----------------------------------
   output$plot_neighborhood <- renderPlotly({
       ggplot(intersection.subset(), 
-             aes(x = neighborhood, fill = neighborhood))+
-      geom_bar(stat='count') +
+             aes(x = neighborhood, fill = neighborhood)) +
+      geom_bar(stat = 'count') +
       labs (y = "Number of Signalized Intersections", x = "Neighborhood") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
@@ -142,7 +219,6 @@ server <- function(input, output) {
       write.csv(intersection.subset(), file, row.names = FALSE)
     }
   )
-  
 }
 
 # Run the application 
